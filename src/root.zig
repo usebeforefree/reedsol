@@ -15,6 +15,7 @@ pub fn encode(
     /// and is required to make sure they are valid while we write into them.
     /// Shards can be undefined.
     parity: []const []u8,
+    parity_count: usize,
     /// Length of each shard. This applies to both data and parity.
     shard_bytes: usize,
 ) !void {
@@ -30,5 +31,5 @@ pub fn encode(
         return @import("engines/AVX512.zig").encode(data, parity, shard_bytes);
     }
 
-    return Engine.encode(data, parity, shard_bytes);
+    return Engine.encode(data, parity, parity_count);
 }

@@ -16,6 +16,14 @@ test "encode 32 data 32 parity 64 bytes" {
     try encodeTest(32, 32, 64, @import("./encode_data_32_32_64.zon"));
 }
 
+test "encode 8 data 4 parity 64 bytes" {
+    try encodeTest(8, 4, 64, @import("./encode_data_8_4_64.zon"));
+}
+
+test "encode 32 data 16 parity 64 bytes" {
+    try encodeTest(32, 16, 64, @import("./encode_data_32_16_64.zon"));
+}
+
 fn encodeTest(
     comptime data_shard_count: usize,
     comptime parity_shard_count: usize,
@@ -30,15 +38,16 @@ fn encodeTest(
     var original: [data_shard_count][]const u8 = undefined;
     for (&original, &shards) |*o, *shard| o.* = shard;
 
-    var parity_shards: [parity_shard_count][shard_bytes]u8 = undefined;
-    var parity: [parity_shard_count][]u8 = undefined;
+    var parity_shards: [data_shard_count][shard_bytes]u8 = undefined;
+    var parity: [data_shard_count][]u8 = undefined;
     for (&parity, &parity_shards) |*p, *shard| p.* = shard;
 
     try encode(
         &original,
         &parity,
+        parity_shard_count,
         shard_bytes,
     );
 
-    for (expected, parity) |e_sh, r_sh| for (e_sh, r_sh) |e, r| try testing.expectEqual(e, r);
+    for (expected, parity[0..parity_shard_count]) |e_sh, r_sh| for (e_sh, r_sh) |e, r| try testing.expectEqual(e, r);
 }

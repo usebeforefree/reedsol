@@ -14,11 +14,11 @@ const V = @Vector(32, u8);
 pub fn encode(
     data: []const []const u8,
     parity: []const []u8,
-    shard_bytes: u64,
+    parity_count: usize,
 ) void {
     for (0..parity.len) |i| @memcpy(parity[i], data[i]);
 
-    const chunk_size = parity.len;
+    const chunk_size = parity_count;
 
     // first chunk
     ifft(parity, 0, chunk_size, chunk_size, chunk_size);
@@ -26,15 +26,15 @@ pub fn encode(
     if (data.len > chunk_size) {
         // full chunks
         var chunk_start = chunk_size;
-        while (chunk_start + chunk_size < data.len) : (chunk_start += chunk_size) {
+        while (chunk_start + chunk_size <= data.len) : (chunk_start += chunk_size) {
             ifft(parity, chunk_start, chunk_size, chunk_size, chunk_start + chunk_size);
             const s0 = parity[0..chunk_size];
-            const s1 = parity[chunk_start * shard_bytes ..][0..chunk_size];
+            const s1 = parity[chunk_start..][0..chunk_size];
             utils.xor(s0, s1);
         }
     }
 
-    fft(parity, 0, chunk_size, parity.len, 0);
+    fft(parity, 0, chunk_size, parity_count, 0);
 }
 
 /// In-place radix-4 FFT.
