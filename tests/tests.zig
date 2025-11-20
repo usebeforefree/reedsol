@@ -4,80 +4,41 @@ const testing = std.testing;
 const reedsol = @import("reedsol");
 const encode = reedsol.encode;
 
-test "encode" {
-    {
-        const SHARD_COUNT = 8;
-        const SHARD_BYTES = 64;
+test "encode 8 data 8 parity 64 bytes" {
+    try encodeTest(8, 8, 64, @import("./encode_data_8_8_64.zon"));
+}
 
-        var input: [SHARD_BYTES * SHARD_COUNT]u8 = undefined;
-        for (0..input.len) |i| input[i] = @intCast(i % 256);
+test "encode 16 data 16 parity 64 bytes" {
+    try encodeTest(16, 16, 64, @import("./encode_data_16_16_64.zon"));
+}
 
-        const shards: [SHARD_COUNT][SHARD_BYTES]u8 = @bitCast(input);
+test "encode 32 data 32 parity 64 bytes" {
+    try encodeTest(32, 32, 64, @import("./encode_data_32_32_64.zon"));
+}
 
-        var original: [SHARD_COUNT][]const u8 = undefined;
-        for (&original, &shards) |*o, *shard| o.* = shard;
+fn encodeTest(
+    comptime data_shard_count: usize,
+    comptime parity_shard_count: usize,
+    comptime shard_bytes: usize,
+    comptime expected: [parity_shard_count][shard_bytes]u8,
+) !void {
+    var input: [shard_bytes * data_shard_count]u8 = undefined;
+    for (0..input.len) |i| input[i] = @intCast(i % 256);
 
-        var parity_shards: [SHARD_COUNT][SHARD_BYTES]u8 = undefined;
-        var parity: [SHARD_COUNT][]u8 = undefined;
-        for (&parity, &parity_shards) |*p, *shard| p.* = shard;
+    const shards: [data_shard_count][shard_bytes]u8 = @bitCast(input);
 
-        try encode(
-            &original,
-            &parity,
-            SHARD_BYTES, // we want the same number of input shards as output
-        );
+    var original: [data_shard_count][]const u8 = undefined;
+    for (&original, &shards) |*o, *shard| o.* = shard;
 
-        const expected: [SHARD_COUNT][SHARD_BYTES]u8 = @import("./encode_data_8_64.zon");
-        for (expected, parity) |e_sh, r_sh| for (e_sh, r_sh) |e, r| try testing.expectEqual(e, r);
-    }
-    {
-        const SHARD_COUNT = 16;
-        const SHARD_BYTES = 64;
+    var parity_shards: [parity_shard_count][shard_bytes]u8 = undefined;
+    var parity: [parity_shard_count][]u8 = undefined;
+    for (&parity, &parity_shards) |*p, *shard| p.* = shard;
 
-        var input: [SHARD_BYTES * SHARD_COUNT]u8 = undefined;
-        for (0..input.len) |i| input[i] = @intCast(i % 256);
+    try encode(
+        &original,
+        &parity,
+        shard_bytes,
+    );
 
-        const shards: [SHARD_COUNT][SHARD_BYTES]u8 = @bitCast(input);
-
-        var original: [SHARD_COUNT][]const u8 = undefined;
-        for (&original, &shards) |*o, *shard| o.* = shard;
-
-        var parity_shards: [SHARD_COUNT][SHARD_BYTES]u8 = undefined;
-        var parity: [SHARD_COUNT][]u8 = undefined;
-        for (&parity, &parity_shards) |*p, *shard| p.* = shard;
-
-        try encode(
-            &original,
-            &parity,
-            SHARD_BYTES, // we want the same number of input shards as output
-        );
-
-        const expected: [SHARD_COUNT][SHARD_BYTES]u8 = @import("./encode_data_16_64.zon");
-        for (expected, parity) |e_sh, r_sh| for (e_sh, r_sh) |e, r| try testing.expectEqual(e, r);
-    }
-    {
-        const SHARD_COUNT = 32;
-        const SHARD_BYTES = 64;
-
-        var input: [SHARD_BYTES * SHARD_COUNT]u8 = undefined;
-        for (0..input.len) |i| input[i] = @intCast(i % 256);
-
-        const shards: [SHARD_COUNT][SHARD_BYTES]u8 = @bitCast(input);
-
-        var original: [SHARD_COUNT][]const u8 = undefined;
-        for (&original, &shards) |*o, *shard| o.* = shard;
-
-        var parity_shards: [SHARD_COUNT][SHARD_BYTES]u8 = undefined;
-        var parity: [SHARD_COUNT][]u8 = undefined;
-        for (&parity, &parity_shards) |*p, *shard| p.* = shard;
-
-        try encode(
-            &original,
-            &parity,
-            SHARD_BYTES, // we want the same number of input shards as output
-        );
-
-        const expected: [SHARD_COUNT][SHARD_BYTES]u8 = @import("./encode_data_32_64.zon");
-        for (expected, parity) |e_sh, r_sh| for (e_sh, r_sh) |e, r| try testing.expectEqual(e, r);
-    }
+    for (expected, parity) |e_sh, r_sh| for (e_sh, r_sh) |e, r| try testing.expectEqual(e, r);
 }
