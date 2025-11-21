@@ -14,27 +14,40 @@ const V = @Vector(32, u8);
 pub fn encode(
     data: []const []const u8,
     parity: []const []u8,
-    parity_count: usize,
+    chunk_size: usize,
 ) void {
-    for (0..parity.len) |i| @memcpy(parity[i], data[i]);
+    const first_count = @min(data.len, chunk_size);
 
-    const chunk_size = parity_count;
+    for (0..@min(parity.len, data.len)) |i| @memcpy(parity[i], data[i]);
 
+    for (parity[first_count..chunk_size]) |p| @memset(p, 0);
     // first chunk
-    ifft(parity, 0, chunk_size, chunk_size, chunk_size);
+    ifft(parity, 0, chunk_size, first_count, chunk_size);
 
     if (data.len > chunk_size) {
         // full chunks
         var chunk_start = chunk_size;
         while (chunk_start + chunk_size <= data.len) : (chunk_start += chunk_size) {
             ifft(parity, chunk_start, chunk_size, chunk_size, chunk_start + chunk_size);
+
+            const s0 = parity[0..chunk_size];
+            const s1 = parity[chunk_start..][0..chunk_size];
+            utils.xor(s0, s1);
+        }
+
+        const last_chunk = data.len % chunk_size;
+        if (last_chunk > 0) {
+            for (parity[chunk_start + last_chunk ..]) |p| @memset(p, 0);
+
+            ifft(parity, chunk_start, chunk_size, last_chunk, chunk_start + chunk_size);
+
             const s0 = parity[0..chunk_size];
             const s1 = parity[chunk_start..][0..chunk_size];
             utils.xor(s0, s1);
         }
     }
 
-    fft(parity, 0, chunk_size, parity_count, 0);
+    fft(parity, 0, chunk_size, chunk_size, 0);
 }
 
 /// In-place radix-4 FFT.
