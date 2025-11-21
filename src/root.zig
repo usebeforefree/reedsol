@@ -54,10 +54,10 @@ pub fn encode(
     const parity_buf_size = std.mem.alignForward(u64, data.len, parity_count_next_pow2);
 
     var parity_work_buf = try allocator.alloc(u8, parity_buf_size * shard_bytes);
-    defer allocator.free(parity_work_buf);
+    errdefer allocator.free(parity_work_buf);
 
     const parity_work = try allocator.alloc([]u8, parity_buf_size);
-    defer allocator.free(parity_work);
+    errdefer allocator.free(parity_work);
 
     for (parity_work, 0..) |*p, i| {
         const start = i * shard_bytes;
@@ -67,18 +67,25 @@ pub fn encode(
 
     Engine.encode(data, parity_work, parity_count, parity_count_next_pow2);
 
-    var parity_buf = try allocator.alloc(u8, parity_count * shard_bytes);
-    errdefer allocator.free(parity_buf);
-    @memcpy(parity_buf, parity_work_buf[0..parity_buf.len]);
+    if (parity_count != parity_buf_size) {
+        var parity_buf = try allocator.alloc(u8, parity_count * shard_bytes);
+        errdefer allocator.free(parity_buf);
+        @memcpy(parity_buf, parity_work_buf[0..parity_buf.len]);
 
-    const parity = try allocator.alloc([]u8, parity_count);
-    errdefer allocator.free(parity);
+        const parity = try allocator.alloc([]u8, parity_count);
+        errdefer allocator.free(parity);
 
-    for (parity, 0..) |*p, i| {
-        const start = i * shard_bytes;
-        const end = start + shard_bytes;
-        p.* = parity_buf[start..end];
+        for (parity, 0..) |*p, i| {
+            const start = i * shard_bytes;
+            const end = start + shard_bytes;
+            p.* = parity_buf[start..end];
+        }
+
+        allocator.free(parity_work_buf);
+        allocator.free(parity_work);
+
+        return .{ parity, parity_buf };
     }
 
-    return .{ parity, parity_buf };
+    return .{ parity_work, parity_work_buf };
 }
