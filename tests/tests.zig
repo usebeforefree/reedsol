@@ -24,6 +24,10 @@ test "encode 32 data 16 parity 64 bytes" {
     try encodeTest(32, 16, 64, @import("./encode_data_32_16_64.zon"));
 }
 
+test "encode 32 data 15 parity 64 bytes" {
+    try encodeTest(32, 15, 64, @import("./encode_data_32_15_64.zon"));
+}
+
 fn encodeTest(
     comptime data_shard_count: usize,
     comptime parity_shard_count: usize,
