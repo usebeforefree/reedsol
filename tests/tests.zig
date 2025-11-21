@@ -32,6 +32,10 @@ test "encode 33 data 16 parity 64 bytes" {
     try encodeTest(33, 16, 64, @import("./encode_data_33_16_64.zon"));
 }
 
+test "encode 101 data 13 parity 64 bytes" {
+    try encodeTest(101, 13, 64, @import("./encode_data_101_13_64.zon"));
+}
+
 fn encodeTest(
     comptime data_shard_count: usize,
     comptime parity_shard_count: usize,
@@ -46,23 +50,14 @@ fn encodeTest(
     var original: [data_shard_count][]const u8 = undefined;
     for (&original, &shards) |*o, *shard| o.* = shard;
 
-    const parity_count_next_pow2 = try std.math.ceilPowerOfTwo(usize, parity_shard_count);
-    const parity_buff_size = std.mem.alignForward(u64, data_shard_count, parity_count_next_pow2);
-
-    const parity_shards = try testing.allocator.alloc([shard_bytes]u8, parity_buff_size);
-    defer testing.allocator.free(parity_shards);
-
-    const parity = try testing.allocator.alloc([]u8, parity_buff_size);
-    defer testing.allocator.free(parity);
-
-    for (parity, parity_shards) |*p, *shard| p.* = shard;
-
-    try encode(
+    const parity, const parity_buf = try encode(
+        testing.allocator,
         &original,
-        parity,
         parity_shard_count,
         shard_bytes,
     );
+    defer testing.allocator.free(parity);
+    defer testing.allocator.free(parity_buf);
 
-    for (expected, parity[0..parity_shard_count]) |e_sh, r_sh| for (e_sh, r_sh) |e, r| try testing.expectEqual(e, r);
+    for (expected, parity) |e_sh, r_sh| for (e_sh, r_sh) |e, r| try testing.expectEqual(e, r);
 }

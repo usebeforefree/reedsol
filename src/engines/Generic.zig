@@ -14,6 +14,7 @@ const V = @Vector(32, u8);
 pub fn encode(
     data: []const []const u8,
     parity: []const []u8,
+    parity_count: usize,
     chunk_size: usize,
 ) void {
     const first_count = @min(data.len, chunk_size);
@@ -47,7 +48,7 @@ pub fn encode(
         }
     }
 
-    fft(parity, 0, chunk_size, chunk_size, 0);
+    fft(parity, 0, chunk_size, parity_count, 0);
 }
 
 /// In-place radix-4 FFT.
