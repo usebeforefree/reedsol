@@ -10,17 +10,24 @@ pub fn encode(
     allocator: std.mem.Allocator,
     /// The input data shards. It's required by the caller to keep the memory
     /// alive during the encoding process, since we don't gain ownership of it.
-    /// Shards have to be defined.
+    /// Shards have to be defined and of `shard_bytes` length. `data.len` must
+    /// be bigger than 0.
     data: []const []const u8,
+    /// The wanted number of parity shards. The result will be a slice pointing
+    /// to a heap allocated array of `parity_count * shard_bytes` size. Must be
+    /// smaller than `data.len`, and bigger than 0.
     parity_count: usize,
     /// Length of each shard. This applies to both data and parity.
+    /// Must be divisable by 64.
     shard_bytes: usize,
 ) !struct { []const []const u8, []const u8 } {
     // Assertions
 
     if (data.len == 0) return error.DataSizeIsZero;
     if (data.len < parity_count) return error.ParityCountTooHigh;
-    if (shard_bytes == 0 or shard_bytes & 1 != 0) return error.InvalidShardBytes;
+    if (shard_bytes == 0) return error.InvalidShardBytes;
+    if (shard_bytes % 64 != 0) return error.ShardBytesNotDivisableBy64;
+    if (data[0].len != shard_bytes) return error.DataShardBytesMismatch;
     if (parity_count == 0) return error.ParityCountIsZero;
 
     // Encoding

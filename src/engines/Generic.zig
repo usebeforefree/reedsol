@@ -191,22 +191,26 @@ pub fn ifft(
 fn fftPartial(x: []const []u8, y: []const []u8, log_m: u16) void {
     const lut: Lut = .init(&tables.mul_128[log_m]);
     for (x, y) |a, b| {
-        var x_lo: V = @bitCast(a[0..32].*);
-        var x_hi: V = @bitCast(a[32..64].*);
+        for (0..x[0].len / 64) |i| {
+            const start = i * 64;
 
-        var y_lo: V = @bitCast(b[0..32].*);
-        var y_hi: V = @bitCast(b[32..64].*);
+            var x_lo: V = @bitCast(a[start..][0..32].*);
+            var x_hi: V = @bitCast(a[start + 32 ..][0..32].*);
 
-        x_lo, x_hi = mulAdd(x_lo, x_hi, y_lo, y_hi, lut);
+            var y_lo: V = @bitCast(b[start..][0..32].*);
+            var y_hi: V = @bitCast(b[start + 32 ..][0..32].*);
 
-        a[0..32].* = @bitCast(x_lo);
-        a[32..64].* = @bitCast(x_hi);
+            x_lo, x_hi = mulAdd(x_lo, x_hi, y_lo, y_hi, lut);
 
-        y_lo ^= x_lo;
-        y_hi ^= x_hi;
+            a[start..][0..32].* = @bitCast(x_lo);
+            a[start + 32 ..][0..32].* = @bitCast(x_hi);
 
-        b[0..32].* = @bitCast(y_lo);
-        b[32..64].* = @bitCast(y_hi);
+            y_lo ^= x_lo;
+            y_hi ^= x_hi;
+
+            b[start..][0..32].* = @bitCast(y_lo);
+            b[start + 32 ..][0..32].* = @bitCast(y_hi);
+        }
     }
 }
 
@@ -214,22 +218,26 @@ fn ifftPartial(x: []const []u8, y: []const []u8, log_m: u16) void {
     const lut: Lut = .init(&tables.mul_128[log_m]);
 
     for (x, y) |a, b| {
-        var x_lo: V = @bitCast(a[0..32].*);
-        var x_hi: V = @bitCast(a[32..64].*);
+        for (0..x[0].len / 64) |i| {
+            const start = i * 64;
 
-        var y_lo: V = @bitCast(b[0..32].*);
-        var y_hi: V = @bitCast(b[32..64].*);
+            var x_lo: V = @bitCast(a[start..][0..32].*);
+            var x_hi: V = @bitCast(a[start + 32 ..][0..32].*);
 
-        y_lo ^= x_lo;
-        y_hi ^= x_hi;
+            var y_lo: V = @bitCast(b[start..][0..32].*);
+            var y_hi: V = @bitCast(b[start + 32 ..][0..32].*);
 
-        b[0..32].* = @bitCast(y_lo);
-        b[32..64].* = @bitCast(y_hi);
+            y_lo ^= x_lo;
+            y_hi ^= x_hi;
 
-        x_lo, x_hi = mulAdd(x_lo, x_hi, y_lo, y_hi, lut);
+            b[start..][0..32].* = @bitCast(y_lo);
+            b[start + 32 ..][0..32].* = @bitCast(y_hi);
 
-        a[0..32].* = @bitCast(x_lo);
-        a[32..64].* = @bitCast(x_hi);
+            x_lo, x_hi = mulAdd(x_lo, x_hi, y_lo, y_hi, lut);
+
+            a[start..][0..32].* = @bitCast(x_lo);
+            a[start + 32 ..][0..32].* = @bitCast(x_hi);
+        }
     }
 }
 

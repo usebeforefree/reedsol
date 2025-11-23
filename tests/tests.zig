@@ -8,6 +8,10 @@ test "encode 8 data 8 parity 64 bytes" {
     try encodeTest(8, 8, 64, @import("./encode_data_8_8_64.zon"));
 }
 
+test "encode 16 data 8 parity 128 bytes" {
+    try encodeTest(16, 8, 128, @import("./encode_data_16_8_128.zon"));
+}
+
 test "encode 16 data 16 parity 64 bytes" {
     try encodeTest(16, 16, 64, @import("./encode_data_16_16_64.zon"));
 }
