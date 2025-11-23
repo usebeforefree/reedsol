@@ -74,25 +74,26 @@ pub fn encode(
 
     Engine.encode(data, parity_work, parity_count, parity_count_next_pow2);
 
-    if (parity_count != parity_buf_size) {
-        var parity_buf = try allocator.alloc(u8, parity_count * shard_bytes);
-        errdefer allocator.free(parity_buf);
-        @memcpy(parity_buf, parity_work_buf[0..parity_buf.len]);
+    if (parity_count == parity_buf_size)
+        return .{ parity_work, parity_work_buf };
 
-        const parity = try allocator.alloc([]u8, parity_count);
-        errdefer allocator.free(parity);
+    // Memcpy into a smaller buffer and free work buf
 
-        for (parity, 0..) |*p, i| {
-            const start = i * shard_bytes;
-            const end = start + shard_bytes;
-            p.* = parity_buf[start..end];
-        }
+    var parity_buf = try allocator.alloc(u8, parity_count * shard_bytes);
+    errdefer allocator.free(parity_buf);
+    @memcpy(parity_buf, parity_work_buf[0..parity_buf.len]);
 
-        allocator.free(parity_work_buf);
-        allocator.free(parity_work);
+    const parity = try allocator.alloc([]u8, parity_count);
+    errdefer allocator.free(parity);
 
-        return .{ parity, parity_buf };
+    for (parity, 0..) |*p, i| {
+        const start = i * shard_bytes;
+        const end = start + shard_bytes;
+        p.* = parity_buf[start..end];
     }
 
-    return .{ parity_work, parity_work_buf };
+    allocator.free(parity_work_buf);
+    allocator.free(parity_work);
+
+    return .{ parity, parity_buf };
 }
