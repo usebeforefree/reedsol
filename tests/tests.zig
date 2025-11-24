@@ -54,14 +54,16 @@ fn encodeTest(
     var original: [data_shard_count][]const u8 = undefined;
     for (&original, &shards) |*o, *shard| o.* = shard;
 
-    const parity, const parity_buf = try encode(
+    var parity_buf: [parity_shard_count][shard_bytes]u8 = undefined;
+    var parity: [parity_shard_count][]u8 = undefined;
+    for (&parity, &parity_buf) |*p, *shard| p.* = shard;
+
+    try encode(
         testing.allocator,
         &original,
-        parity_shard_count,
+        &parity,
         shard_bytes,
     );
-    defer testing.allocator.free(parity);
-    defer testing.allocator.free(parity_buf);
 
     for (expected, parity) |e_sh, r_sh| for (e_sh, r_sh) |e, r| try testing.expectEqual(e, r);
 }

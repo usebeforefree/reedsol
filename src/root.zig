@@ -13,87 +13,66 @@ pub fn encode(
     /// Shards have to be defined and of `shard_bytes` length. `data.len` must
     /// be bigger than 0.
     data: []const []const u8,
-    /// The wanted number of parity shards. The result will be a slice pointing
-    /// to a heap allocated array of `parity_count * shard_bytes` size. Must be
-    /// smaller than `data.len`, and bigger than 0.
-    parity_count: usize,
+    /// The output parity shards. It's required by the caller to keep the memory
+    /// alive during the encoding process, since we don't gain ownership of it.
+    /// `parity.len` is the number of parity shards, which must be smaller than
+    /// `data.len`, and bigger than 0. Shards must be of `shard_bytes` length.
+    parity: []const []u8,
     /// Length of each shard. This applies to both data and parity.
-    /// Must be divisable by 64.
+    /// Must be divisible by 64.
     shard_bytes: usize,
-) !struct { []const []const u8, []const u8 } {
+) !void {
     // Assertions
 
-    if (data.len == 0) return error.DataSizeIsZero;
-    if (data.len < parity_count) return error.ParityCountTooHigh;
+    if (data.len == 0) return error.DataShardCountIsZero;
+    if (parity.len == 0) return error.ParityShardCountIsZero;
+    if (data.len < parity.len) return error.ParityShardCountTooHigh;
     if (shard_bytes == 0) return error.InvalidShardBytes;
     if (shard_bytes % 64 != 0) return error.ShardBytesNotDivisableBy64;
     if (data[0].len != shard_bytes) return error.DataShardBytesMismatch;
-    if (parity_count == 0) return error.ParityCountIsZero;
+    if (parity[0].len != shard_bytes) return error.ParityShardBytesMismatch;
 
     // Encoding
 
     // AVX512 instructions for 32/32/64 encoding
-    if (has_gfni and data.len == 32 and parity_count == 32) {
-        var parity_buf = try allocator.alloc(u8, parity_count * shard_bytes);
-        errdefer allocator.free(parity_buf);
-
-        var parity = try allocator.alloc([]u8, parity_count);
-        errdefer allocator.free(parity);
-
-        for (&parity, 0..) |*p, i| {
-            const start = i * shard_bytes;
-            const end = start + shard_bytes;
-            p.* = parity_buf[start..end];
-        }
-
-        @import("engines/AVX512.zig").encode(data, parity, shard_bytes);
-
-        return .{ parity, parity_buf };
+    if (has_gfni and data.len == 32 and parity.len == 32) {
+        return @import("engines/AVX512.zig").encode(data, parity, shard_bytes);
     }
 
     // Generic instructions for data.len/parity_count/shard_bytes encoding
-    const parity_count_next_pow2 = std.math.ceilPowerOfTwo(usize, parity_count) catch {
-        if (parity_count == 0)
-            return error.ParityCountIsZero
+
+    const parity_count_next_pow2 = std.math.ceilPowerOfTwo(usize, parity.len) catch {
+        if (parity.len == 0)
+            return error.ParityShardCountIsZero
         else
-            return error.ParityCountTooHigh;
+            return error.ParityShardCountTooHigh;
     };
     const parity_buf_size = std.mem.alignForward(u64, data.len, parity_count_next_pow2);
 
-    var parity_work_buf = try allocator.alloc(u8, parity_buf_size * shard_bytes);
-    errdefer allocator.free(parity_work_buf);
+    if (parity.len == parity_buf_size)
+        // No need for allocating a work buffer
+        return Engine.encode(data, parity, parity.len, parity_count_next_pow2)
+    else {
+        // Alloc a work buffer
 
-    const parity_work = try allocator.alloc([]u8, parity_buf_size);
-    errdefer allocator.free(parity_work);
+        var parity_work_buf = try allocator.alloc(u8, parity_buf_size * shard_bytes);
+        defer allocator.free(parity_work_buf);
 
-    for (parity_work, 0..) |*p, i| {
-        const start = i * shard_bytes;
-        const end = start + shard_bytes;
-        p.* = parity_work_buf[start..end];
+        const parity_work = try allocator.alloc([]u8, parity_buf_size);
+        defer allocator.free(parity_work);
+
+        for (parity_work, 0..) |*p, i| {
+            const start = i * shard_bytes;
+            p.* = parity_work_buf[start..][0..shard_bytes];
+        }
+
+        Engine.encode(data, parity_work, parity.len, parity_count_next_pow2);
+
+        for (parity, 0..) |*p, i| {
+            const start = i * shard_bytes;
+            @memcpy(p.*, parity_work_buf[start..][0..shard_bytes]);
+        }
+
+        return;
     }
-
-    Engine.encode(data, parity_work, parity_count, parity_count_next_pow2);
-
-    if (parity_count == parity_buf_size)
-        return .{ parity_work, parity_work_buf };
-
-    // Memcpy into a smaller buffer and free work buf
-
-    var parity_buf = try allocator.alloc(u8, parity_count * shard_bytes);
-    errdefer allocator.free(parity_buf);
-    @memcpy(parity_buf, parity_work_buf[0..parity_buf.len]);
-
-    const parity = try allocator.alloc([]u8, parity_count);
-    errdefer allocator.free(parity);
-
-    for (parity, 0..) |*p, i| {
-        const start = i * shard_bytes;
-        const end = start + shard_bytes;
-        p.* = parity_buf[start..end];
-    }
-
-    allocator.free(parity_work_buf);
-    allocator.free(parity_work);
-
-    return .{ parity, parity_buf };
 }
