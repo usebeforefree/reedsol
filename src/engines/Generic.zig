@@ -13,42 +13,107 @@ const V = @Vector(32, u8);
 
 pub fn encode(
     data: []const []const u8,
-    parity: []const []u8,
+    work: []const []u8,
     parity_count: usize,
     chunk_size: usize,
 ) void {
     const first_count = @min(data.len, chunk_size);
 
-    for (0..@min(parity.len, data.len)) |i| @memcpy(parity[i], data[i]);
+    for (0..@min(work.len, data.len)) |i| @memcpy(work[i], data[i]);
 
-    for (parity[first_count..chunk_size]) |p| @memset(p, 0);
+    for (work[first_count..chunk_size]) |p| @memset(p, 0);
     // first chunk
-    ifft(parity, 0, chunk_size, first_count, chunk_size);
+    ifft(work, 0, chunk_size, first_count, chunk_size);
 
     if (data.len > chunk_size) {
         // full chunks
         var chunk_start = chunk_size;
         while (chunk_start + chunk_size <= data.len) : (chunk_start += chunk_size) {
-            ifft(parity, chunk_start, chunk_size, chunk_size, chunk_start + chunk_size);
+            ifft(work, chunk_start, chunk_size, chunk_size, chunk_start + chunk_size);
 
-            const s0 = parity[0..chunk_size];
-            const s1 = parity[chunk_start..][0..chunk_size];
+            const s0 = work[0..chunk_size];
+            const s1 = work[chunk_start..][0..chunk_size];
             utils.xor(s0, s1);
         }
 
         const last_chunk = data.len % chunk_size;
         if (last_chunk > 0) {
-            for (parity[chunk_start + last_chunk ..]) |p| @memset(p, 0);
+            for (work[chunk_start + last_chunk ..]) |p| @memset(p, 0);
 
-            ifft(parity, chunk_start, chunk_size, last_chunk, chunk_start + chunk_size);
+            ifft(work, chunk_start, chunk_size, last_chunk, chunk_start + chunk_size);
 
-            const s0 = parity[0..chunk_size];
-            const s1 = parity[chunk_start..][0..chunk_size];
+            const s0 = work[0..chunk_size];
+            const s1 = work[chunk_start..][0..chunk_size];
             utils.xor(s0, s1);
         }
     }
 
-    fft(parity, 0, chunk_size, parity_count, 0);
+    fft(work, 0, chunk_size, parity_count, 0);
+}
+
+pub fn decode(
+    work: []const []u8,
+    data_count: usize,
+    shards_present: []const bool,
+    parity: []const ?[]const u8,
+    erasures: []u16,
+    chunk_size: usize,
+) void {
+    const original_end = chunk_size + data_count;
+
+    // mark missing recovery shards / erasures
+    for (0..parity.len) |i| {
+        if (!shards_present[i]) erasures[i] = 1;
+    }
+
+    @memset(erasures[parity.len..chunk_size], 1);
+
+    // mark missing original shreds
+    for (chunk_size..original_end) |i| {
+        if (!shards_present[i]) erasures[i] = 1;
+    }
+
+    evalPoly(erasures, original_end);
+
+    // apply erasure masks to all chunks
+    for (0..parity.len) |i| {
+        const chunk = work[i];
+        if (shards_present[i]) mulScalar(chunk, erasures[i]) else @memset(chunk, 0);
+    }
+
+    for (parity.len..chunk_size) |i|
+        @memset(work[i], 0);
+
+    // original region
+    for (chunk_size..original_end) |i| {
+        const chunk = work[i];
+        if (shards_present[i]) mulScalar(chunk, erasures[i]) else @memset(chunk, 0);
+    }
+    for (original_end..work.len) |i|
+        @memset(work[i], 0);
+
+    // convert from freq to time domain
+    ifft(work, 0, work.len, original_end, 0);
+
+    // formal derivative (forney's algorithm)
+    for (1..work.len) |i| {
+        // intCast is safe because i cannot be 0 nor usize max
+        const width: u64 = @as(u64, 1) << @intCast(@ctz(i));
+        const s0 = work[(i - width)..][0..width];
+        const s1 = work[i..][0..width];
+        utils.xor(s0, s1);
+    }
+
+    // return to freq domain
+    fft(work, 0, work.len, original_end, 0);
+
+    // restore the missing (erased) shards
+    for (chunk_size..original_end) |i| if (!shards_present[i]) {
+        mulScalar(
+            work[i],
+            gf.modulus - erasures[i],
+        );
+    };
 }
 
 /// In-place radix-4 FFT.
@@ -247,7 +312,7 @@ fn ifftPartial(x: []const []u8, y: []const []u8, log_m: u16) void {
 /// of all known erasures according to the erasure locator polynomial.
 ///
 /// This implementation uses multiple rounds of walsh-hadamard transformations.
-pub fn evalPoly(erasures: *[gf.order]u16, truncated_size: u64) void {
+pub fn evalPoly(erasures: []u16, truncated_size: u64) void {
     // move the erasure indicators into the "spectral" domain,
     // where linear operations (adds/XORs) become commponent-wise.
     walsh_hadamard.fwht(erasures, truncated_size);
@@ -267,16 +332,21 @@ pub fn evalPoly(erasures: *[gf.order]u16, truncated_size: u64) void {
 /// Mutliplies a slice of 64-byte chunks by a finite field scalar `log_m`.
 ///
 /// Each 64-byte chunk represents 512 bits (or 64 GF(2^8) symbols).
-pub fn mulScalar(x: [][64]u8, log_m: u16) void {
+pub fn mulScalar(x: []u8, log_m: u16) void {
+    std.debug.assert(x.len >= 0);
+    std.debug.assert(x.len % 64 == 0);
+
     const lut: Lut = .init(&tables.mul_128[log_m]);
-    for (x) |*chunk| {
-        var x_lo: V = @bitCast(chunk[0..32].*);
-        var x_hi: V = @bitCast(chunk[32..64].*);
+
+    for (0..x.len / 64) |i| {
+        const start = i * 64;
+        var x_lo: V = @bitCast(x[start..][0..32].*);
+        var x_hi: V = @bitCast(x[start..][32..64].*);
 
         x_lo, x_hi = mul(x_lo, x_hi, lut);
 
-        chunk[0..32].* = @bitCast(x_lo);
-        chunk[32..64].* = @bitCast(x_hi);
+        x[start..][0..32].* = @bitCast(x_lo);
+        x[start..][32..64].* = @bitCast(x_hi);
     }
 }
 

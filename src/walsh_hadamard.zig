@@ -13,7 +13,7 @@ const utils = @import("utilities.zig");
 ///
 /// The pattern of strides and recursive butterflies ensures logarithmic complexity
 /// O(N log N), same as radix-4 FFT.
-pub fn fwht(data: *[gf.order]u16, m: u64) void {
+pub fn fwht(data: []u16, m: u64) void {
     var dist: u64 = 1; // distance between elements in the first stage
     var stride: u64 = 4; // radix-4 stride increment
 
@@ -33,7 +33,7 @@ pub fn fwht(data: *[gf.order]u16, m: u64) void {
 ///
 /// The 4-point structure combines values spaced at `stride` apart,
 /// computing pairwise sums and differences in a recursive pattern.
-fn fwht4(data: *[gf.order]u16, offset: u16, stride: u16) void {
+fn fwht4(data: []u16, offset: u16, stride: u16) void {
     // indices for this butterfly group
     const x0: u64 = offset + stride * 0;
     const x1: u64 = offset + stride * 1;
