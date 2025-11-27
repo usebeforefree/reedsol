@@ -18,6 +18,75 @@ pub fn encode(
     data: []const []const u8,
     parity: []const []u8,
 ) void {
+    const data_count_pow2 = std.math.ceilPowerOfTwoAssert(usize, data_count);
+    const parity_count_pow2 = std.math.ceilPowerOfTwoAssert(usize, parity_count);
+
+    if (data_count_pow2 < parity_count_pow2 or
+        (data_count_pow2 == parity_count_pow2 and
+            data_count > parity_count))
+        // low rate has not yet been tested.
+        return encodeLowRate(data_count, parity_count, shard_bytes, data, parity)
+    else
+        return encodeHighRate(data_count, parity_count, shard_bytes, data, parity);
+}
+
+pub fn encodeLowRate(
+    comptime data_count: usize,
+    comptime parity_count: usize,
+    comptime shard_bytes: usize,
+    data: []const []const u8,
+    parity: []const []u8,
+) void {
+    std.debug.print("It is called!\n", .{});
+    const chunk_size = comptime std.math.ceilPowerOfTwoAssert(usize, data_count);
+    const work_buf_size = comptime std.mem.alignForward(u64, data_count, chunk_size);
+
+    var work_buf: [work_buf_size * shard_bytes]u8 = undefined;
+    const work: [work_buf_size][]u8 = blk: {
+        var buf: [work_buf_size][]u8 = undefined;
+        for (&buf, 0..) |*b, i| {
+            const start = i * shard_bytes;
+            b.* = work_buf[start..][0..shard_bytes];
+        }
+        break :blk buf;
+    };
+
+    for (0..@min(work.len, data_count)) |i| @memcpy(work[i], data[i]);
+
+    for (work[data_count..chunk_size]) |p| @memset(p, 0);
+
+    ifft(&work, 0, chunk_size, data_count, 0);
+
+    var chunk_start = chunk_size;
+    while (chunk_start <= parity_count) : (chunk_start += chunk_size) {
+        const s0 = work[0..chunk_size];
+        const s1 = work[chunk_start..][0..chunk_size];
+        for (s0, s1) |ac, bc| {
+            std.mem.copyBackwards(u8, ac, bc);
+        }
+    }
+
+    var chunk_start2: usize = 0;
+    while (chunk_start2 + chunk_size <= parity_count) : (chunk_start2 += chunk_size) {
+        fft(&work, chunk_start, chunk_size, chunk_size, chunk_start + chunk_size);
+    }
+
+    const last_count = parity_count % chunk_size;
+    if (last_count > 0)
+        fft(&work, chunk_start, chunk_size, last_count, chunk_start + chunk_size);
+
+    for (0..parity_count) |i| {
+        @memcpy(parity[i], work[i]);
+    }
+}
+
+pub fn encodeHighRate(
+    comptime data_count: usize,
+    comptime parity_count: usize,
+    comptime shard_bytes: usize,
+    data: []const []const u8,
+    parity: []const []u8,
+) void {
     const chunk_size = comptime std.math.ceilPowerOfTwoAssert(usize, parity_count);
     const work_buf_size = comptime std.mem.alignForward(u64, data_count, chunk_size);
 
