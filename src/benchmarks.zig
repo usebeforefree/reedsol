@@ -27,9 +27,9 @@ fn roundtrip(gpa: std.mem.Allocator) !void {
     }) |entry| {
         const data_shard_count, const parity_shard_count, const shard_bytes = entry;
 
-        var input = try arena.alloc(u8, shard_bytes * data_shard_count);
+        const input = try arena.alloc(u8, shard_bytes * data_shard_count);
         defer arena.free(input);
-        for (0..input.len) |i| input[i] = @intCast(i % 256);
+        std.crypto.random.bytes(input);
 
         const original_buf: *[data_shard_count][shard_bytes]u8 = @ptrCast(input);
         var original: [data_shard_count][]const u8 = undefined;
@@ -41,7 +41,7 @@ fn roundtrip(gpa: std.mem.Allocator) !void {
 
         {
             var name_buffer: [100]u8 = undefined;
-            const name = try std.fmt.bufPrint(&name_buffer, "encode:{d}/{d}", .{ data_shard_count, parity_shard_count });
+            const name = try std.fmt.bufPrint(&name_buffer, "encode:{d}/{d}/{d}", .{ data_shard_count, parity_shard_count, shard_bytes });
             const node = progress.start(name, ITERATIONS);
             defer node.end();
 
