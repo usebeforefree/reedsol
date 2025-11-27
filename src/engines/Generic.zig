@@ -12,35 +12,49 @@ const utils = @import("../utilities.zig");
 const V = @Vector(32, u8);
 
 pub fn encode(
+    comptime data_count: usize,
+    comptime parity_count: usize,
+    comptime shard_bytes: usize,
     data: []const []const u8,
-    work: []const []u8,
-    parity_count: usize,
-    chunk_size: usize,
+    parity: []const []u8,
 ) void {
-    const first_count = @min(data.len, chunk_size);
+    const chunk_size = comptime std.math.ceilPowerOfTwoAssert(usize, parity_count);
+    const work_buf_size = comptime std.mem.alignForward(u64, data_count, chunk_size);
 
-    for (0..@min(work.len, data.len)) |i| @memcpy(work[i], data[i]);
+    var work_buf: [work_buf_size * shard_bytes]u8 = undefined;
+    const work: [work_buf_size][]u8 = blk: {
+        var buf: [work_buf_size][]u8 = undefined;
+        for (&buf, 0..) |*b, i| {
+            const start = i * shard_bytes;
+            b.* = work_buf[start..][0..shard_bytes];
+        }
+        break :blk buf;
+    };
+
+    const first_count = @min(data_count, chunk_size);
+
+    for (0..@min(work.len, data_count)) |i| @memcpy(work[i], data[i]);
 
     for (work[first_count..chunk_size]) |p| @memset(p, 0);
     // first chunk
-    ifft(work, 0, chunk_size, first_count, chunk_size);
+    ifft(&work, 0, chunk_size, first_count, chunk_size);
 
-    if (data.len > chunk_size) {
+    if (data_count > chunk_size) {
         // full chunks
         var chunk_start = chunk_size;
-        while (chunk_start + chunk_size <= data.len) : (chunk_start += chunk_size) {
-            ifft(work, chunk_start, chunk_size, chunk_size, chunk_start + chunk_size);
+        while (chunk_start + chunk_size <= data_count) : (chunk_start += chunk_size) {
+            ifft(&work, chunk_start, chunk_size, chunk_size, chunk_start + chunk_size);
 
             const s0 = work[0..chunk_size];
             const s1 = work[chunk_start..][0..chunk_size];
             utils.xor(s0, s1);
         }
 
-        const last_chunk = data.len % chunk_size;
+        const last_chunk = data_count % chunk_size;
         if (last_chunk > 0) {
             for (work[chunk_start + last_chunk ..]) |p| @memset(p, 0);
 
-            ifft(work, chunk_start, chunk_size, last_chunk, chunk_start + chunk_size);
+            ifft(&work, chunk_start, chunk_size, last_chunk, chunk_start + chunk_size);
 
             const s0 = work[0..chunk_size];
             const s1 = work[chunk_start..][0..chunk_size];
@@ -48,7 +62,11 @@ pub fn encode(
         }
     }
 
-    fft(work, 0, chunk_size, parity_count, 0);
+    fft(&work, 0, chunk_size, parity_count, 0);
+
+    for (0..parity_count) |i| {
+        @memcpy(parity[i], work[i]);
+    }
 }
 
 pub fn decode(
@@ -93,7 +111,7 @@ pub fn decode(
         @memset(work[i], 0);
 
     // convert from freq to time domain
-    ifft(work, 0, work.len, original_end, 0);
+    ifft(&work, 0, work.len, original_end, 0);
 
     // formal derivative (forney's algorithm)
     for (1..work.len) |i| {
@@ -105,7 +123,7 @@ pub fn decode(
     }
 
     // return to freq domain
-    fft(work, 0, work.len, original_end, 0);
+    fft(&work, 0, work.len, original_end, 0);
 
     // restore the missing (erased) shards
     for (chunk_size..original_end) |i| if (!shards_present[i]) {

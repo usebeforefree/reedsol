@@ -22,8 +22,8 @@ fn roundtrip(gpa: std.mem.Allocator) !void {
     var progress = std.Progress.start(.{});
 
     inline for ([_]struct { usize, usize, usize }{
-        .{ 32, 32, 64 },
-        .{ 64, 64, 64 },
+        .{ 32, 32, 1024 },
+        .{ 64, 64, 1024 },
     }) |entry| {
         const data_shard_count, const parity_shard_count, const shard_bytes = entry;
 
@@ -53,7 +53,6 @@ fn roundtrip(gpa: std.mem.Allocator) !void {
 
                 var start = try std.time.Timer.start();
                 std.mem.doNotOptimizeAway(try reedsol.encode(
-                    arena,
                     &original,
                     &parity,
                     shard_bytes,

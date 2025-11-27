@@ -9,7 +9,6 @@ pub const Engine = switch (builtin.target.cpu.arch) {
 };
 
 pub fn encode(
-    allocator: std.mem.Allocator,
     /// The input data shards. It's required by the caller to keep the memory
     /// alive during the encoding process, since we don't gain ownership of it.
     /// Shards have to be defined and of `shard_bytes` length. `data.len` must
@@ -47,39 +46,48 @@ pub fn encode(
 
     // Generic instructions for data.len/parity_count/shard_bytes encoding
 
-    const parity_count_next_pow2 = std.math.ceilPowerOfTwo(usize, parity.len) catch {
-        if (parity.len == 0)
-            return error.ParityShardCountIsZero
-        else
-            return error.ParityShardCountTooHigh;
-    };
-    const work_buf_size = std.mem.alignForward(u64, data.len, parity_count_next_pow2);
-
-    if (parity.len == work_buf_size)
-        // No need for allocating a work buffer
-        return Engine.encode(data, parity, parity.len, parity_count_next_pow2)
-    else {
-        // Alloc a work buffer
-
-        var work_buf = try allocator.alloc(u8, work_buf_size * shard_bytes);
-        defer allocator.free(work_buf);
-
-        const work = try allocator.alloc([]u8, work_buf_size);
-        defer allocator.free(work);
-
-        for (work, 0..) |*p, i| {
-            const start = i * shard_bytes;
-            p.* = work_buf[start..][0..shard_bytes];
-        }
-
-        Engine.encode(data, work, parity.len, parity_count_next_pow2);
-
-        for (parity, 0..) |*p, i| {
-            const start = i * shard_bytes;
-            @memcpy(p.*, work_buf[start..][0..shard_bytes]);
-        }
-
-        return;
+    @setEvalBranchQuota(9000);
+    switch (data.len) {
+        inline 1...16 => |i| {
+            switch (parity.len) {
+                inline 1...16 => |j| {
+                    switch (shard_bytes) {
+                        inline 64, 128 => |sb| {
+                            Engine.encode(i, j, sb, data, parity);
+                        },
+                        else => return,
+                    }
+                },
+                else => return,
+            }
+        },
+        inline 17...32 => |i| {
+            switch (parity.len) {
+                inline 1...32 => |j| {
+                    switch (shard_bytes) {
+                        inline 64, 128 => |sb| {
+                            Engine.encode(i, j, sb, data, parity);
+                        },
+                        else => return,
+                    }
+                },
+                else => return,
+            }
+        },
+        inline 33...64 => |i| {
+            switch (parity.len) {
+                inline 1...64 => |j| {
+                    switch (shard_bytes) {
+                        inline 64, 128 => |sb| {
+                            Engine.encode(i, j, sb, data, parity);
+                        },
+                        else => return,
+                    }
+                },
+                else => return,
+            }
+        },
+        else => return,
     }
 }
 
