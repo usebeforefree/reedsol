@@ -9,9 +9,10 @@ pub fn main() !void {
 }
 
 const ITERATIONS = 10_000;
+const WARMUP_ITERATIONS = 1_000;
 
 fn roundtrip(gpa: std.mem.Allocator) !void {
-    var stdout_buffer: [0x100]u8 = undefined;
+    var stdout_buffer: [0x1000]u8 = undefined;
     var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
     const stdout = &stdout_writer.interface;
 
@@ -22,8 +23,12 @@ fn roundtrip(gpa: std.mem.Allocator) !void {
     var progress = std.Progress.start(.{});
 
     inline for ([_]struct { usize, usize, usize }{
-        .{ 32, 32, 64 },
-        .{ 64, 64, 64 },
+        .{ 32, 32, 1024 },
+        .{ 64, 64, 1024 },
+        .{ 128, 128, 1024 },
+        .{ 256, 256, 1024 },
+        .{ 512, 512, 1024 },
+        .{ 1024, 1024, 1024 },
     }) |entry| {
         const data_shard_count, const parity_shard_count, const shard_bytes = entry;
 
@@ -47,9 +52,17 @@ fn roundtrip(gpa: std.mem.Allocator) !void {
 
             var total_ns: u64 = 0;
 
-            for (0..ITERATIONS) |i| {
+            for (0..WARMUP_ITERATIONS) |_| {
+                std.mem.doNotOptimizeAway(try reedsol.encode(
+                    arena,
+                    &original,
+                    &parity,
+                    shard_bytes,
+                ));
+            }
+
+            for (0..ITERATIONS) |_| {
                 defer node.completeOne();
-                std.mem.doNotOptimizeAway(i);
 
                 var start = try std.time.Timer.start();
                 std.mem.doNotOptimizeAway(try reedsol.encode(
