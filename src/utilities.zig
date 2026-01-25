@@ -17,13 +17,13 @@ pub fn subMod(x: u32, y: u32) u16 {
     return @truncate(dif + (dif >> 16));
 }
 
-pub inline fn xorWithin(a: []const []u8, b: []const []u8) void {
+pub inline fn xorWithin(a: []const []u8, b: []const []const u8) void {
     for (a, b) |ac, bc| {
         xor(ac, bc);
     }
 }
 
-pub inline fn xor(a: []u8, b: []u8) void {
+pub inline fn xor(a: []u8, b: []const u8) void {
     std.debug.assert(a.len == b.len);
     std.debug.assert(a.len % 64 == 0);
     std.debug.assert(b.len % 64 == 0);
