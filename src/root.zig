@@ -3,7 +3,6 @@ const builtin = @import("builtin");
 
 const gf = @import("gf.zig");
 
-const has_gfni = builtin.target.cpu.has(.x86, .gfni) and builtin.zig_backend == .stage2_llvm;
 pub const Engine = switch (builtin.target.cpu.arch) {
     else => @import("engines/Generic.zig"),
 };
@@ -39,11 +38,6 @@ pub fn encode(
     }
 
     // Encoding
-
-    // AVX512 instructions for 32/32/64 encoding
-    if (has_gfni and data.len == 32 and parity.len == 32) {
-        return @import("engines/AVX512.zig").encode(data, parity, shard_bytes);
-    }
 
     // Generic instructions for data.len/parity_count/shard_bytes encoding
 
@@ -138,11 +132,6 @@ pub fn decode(
     if (data_present_count == data.len) return;
 
     // Decoding
-
-    // AVX512 instructions for 32/32/64 encoding
-    if (has_gfni and data.len == 32 and parity.len == 32) {
-        @panic("TODO");
-    }
 
     // Generic instructions for data.len/parity_count/shard_bytes encoding
 

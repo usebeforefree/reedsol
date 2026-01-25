@@ -198,9 +198,7 @@ pub fn ifft(
             const log_m02 = tables.skew[base + stride * 1];
             const log_m23 = tables.skew[base + stride * 2];
 
-            for (0..stride) |offset| {
-                const i = r + offset;
-
+            for (r..r + stride) |i| {
                 const position = start_index + i;
 
                 const s0 = data[position + stride * 0];
@@ -239,17 +237,18 @@ pub fn ifft(
 
     if (stride < size) {
         const log_m = tables.skew[stride + skew_delta - 1];
-        const index = (start_index + stride);
 
         if (log_m == gf.modulus) {
-            const s0 = data[index..][0..stride];
+            const s0 = data[start_index + stride ..][0..stride];
             const s1 = data[start_index..][0..stride];
             utils.xorWithin(s0, s1);
         } else {
             for (0..stride) |i| {
-                const s0 = data[start_index + i];
-                const s1 = data[index + i];
-                ifftPartial(s0, s1, log_m);
+                ifftPartial(
+                    data[start_index + i],
+                    data[start_index + stride + i],
+                    log_m,
+                );
             }
         }
     }
@@ -370,25 +369,28 @@ const Lut = struct {
 
     inline fn init(lut: *const tables.Lut) Lut {
         return .{
-            .t0_lo = broadcast(lut[0][0]),
-            .t0_hi = broadcast(lut[1][0]),
+            .t0_lo = broadcast(&lut[0][0]),
+            .t0_hi = broadcast(&lut[1][0]),
 
-            .t1_lo = broadcast(lut[0][1]),
-            .t1_hi = broadcast(lut[1][1]),
+            .t1_lo = broadcast(&lut[0][1]),
+            .t1_hi = broadcast(&lut[1][1]),
 
-            .t2_lo = broadcast(lut[0][2]),
-            .t2_hi = broadcast(lut[1][2]),
+            .t2_lo = broadcast(&lut[0][2]),
+            .t2_hi = broadcast(&lut[1][2]),
 
-            .t3_lo = broadcast(lut[0][3]),
-            .t3_hi = broadcast(lut[1][3]),
+            .t3_lo = broadcast(&lut[0][3]),
+            .t3_hi = broadcast(&lut[1][3]),
         };
     }
 };
 
-fn broadcast(x: u128) V {
-    const parts: [2]u64 = @bitCast(x);
-    const result = @shuffle(u64, parts, undefined, @Vector(4, i32){ 0, 1, 0, 1 });
-    return @bitCast(result);
+fn broadcast(x: *const u128) V {
+    const bytes: [16]u8 = @bitCast(x.*);
+    const v128: @Vector(16, u8) = bytes;
+    return @shuffle(u8, v128, v128, @Vector(32, i32){
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+    });
 }
 
 inline fn mul(lo: V, hi: V, lut: Lut) struct { V, V } {
