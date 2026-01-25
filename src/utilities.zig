@@ -17,20 +17,23 @@ pub fn subMod(x: u32, y: u32) u16 {
     return @truncate(dif + (dif >> 16));
 }
 
-pub fn xor(a: []const []u8, b: []const []u8) void {
-    std.debug.assert(a.len == b.len);
-    std.debug.assert(a.len >= 0);
-    std.debug.assert(a[0].len % 64 == 0);
-    std.debug.assert(b[0].len % 64 == 0);
-
+pub inline fn xorWithin(a: []const []u8, b: []const []u8) void {
     for (a, b) |ac, bc| {
-        for (0..a[0].len / 64) |i| {
-            const start = i * 64;
+        xor(ac, bc);
+    }
+}
 
-            const c: @Vector(64, u8) = ac[start..][0..64].*;
-            const d: @Vector(64, u8) = bc[start..][0..64].*;
+pub inline fn xor(a: []u8, b: []u8) void {
+    std.debug.assert(a.len == b.len);
+    std.debug.assert(a.len % 64 == 0);
+    std.debug.assert(b.len % 64 == 0);
 
-            ac[start..][0..64].* = c ^ d;
-        }
+    for (0..a.len / 64) |i| {
+        const start = i * 64;
+
+        const c: @Vector(64, u8) = a[start..][0..64].*;
+        const d: @Vector(64, u8) = b[start..][0..64].*;
+
+        a[start..][0..64].* = c ^ d;
     }
 }

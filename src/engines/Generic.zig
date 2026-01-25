@@ -33,7 +33,7 @@ pub fn encode(
 
             const s0 = work[0..chunk_size];
             const s1 = work[chunk_start..][0..chunk_size];
-            utils.xor(s0, s1);
+            utils.xorWithin(s0, s1);
         }
 
         const last_chunk = data.len % chunk_size;
@@ -44,7 +44,7 @@ pub fn encode(
 
             const s0 = work[0..chunk_size];
             const s1 = work[chunk_start..][0..chunk_size];
-            utils.xor(s0, s1);
+            utils.xorWithin(s0, s1);
         }
     }
 
@@ -101,7 +101,7 @@ pub fn decode(
         const width: u64 = @as(u64, 1) << @intCast(@ctz(i));
         const s0 = work[(i - width)..][0..width];
         const s1 = work[i..][0..width];
-        utils.xor(s0, s1);
+        utils.xorWithin(s0, s1);
     }
 
     // return to freq domain
@@ -132,10 +132,10 @@ pub fn fft(data: []const []u8, start_index: u64, size: u64, work_limit: u64, ske
             for (r..r + stride) |i| {
                 const position = start_index + i;
 
-                const s0 = data[(position + stride * 0)..][0..1];
-                const s1 = data[(position + stride * 1)..][0..1];
-                const s2 = data[(position + stride * 2)..][0..1];
-                const s3 = data[(position + stride * 3)..][0..1];
+                const s0 = data[position + stride * 0];
+                const s1 = data[position + stride * 1];
+                const s2 = data[position + stride * 2];
+                const s3 = data[position + stride * 3];
 
                 // first layer
                 if (log_m02 == gf.modulus) {
@@ -168,8 +168,8 @@ pub fn fft(data: []const []u8, start_index: u64, size: u64, work_limit: u64, ske
         var r: usize = 0;
         while (r < work_limit) : (r += 2) {
             const log_m = tables.skew[r + skew_delta];
-            const s0 = data[(start_index + r + 0)..][0..1];
-            const s1 = data[(start_index + r + 1)..][0..1];
+            const s0 = data[start_index + r + 0];
+            const s1 = data[start_index + r + 1];
 
             if (log_m == gf.modulus) {
                 utils.xor(s1, s0);
@@ -198,13 +198,15 @@ pub fn ifft(
             const log_m02 = tables.skew[base + stride * 1];
             const log_m23 = tables.skew[base + stride * 2];
 
-            for (r..r + stride) |i| {
+            for (0..stride) |offset| {
+                const i = r + offset;
+
                 const position = start_index + i;
 
-                const s0 = data[(position + stride * 0)..][0..1];
-                const s1 = data[(position + stride * 1)..][0..1];
-                const s2 = data[(position + stride * 2)..][0..1];
-                const s3 = data[(position + stride * 3)..][0..1];
+                const s0 = data[position + stride * 0];
+                const s1 = data[position + stride * 1];
+                const s2 = data[position + stride * 2];
+                const s3 = data[position + stride * 3];
 
                 // first layer
                 if (log_m01 == gf.modulus) {
@@ -242,67 +244,64 @@ pub fn ifft(
         if (log_m == gf.modulus) {
             const s0 = data[index..][0..stride];
             const s1 = data[start_index..][0..stride];
-            utils.xor(s0, s1);
+            utils.xorWithin(s0, s1);
         } else {
             for (0..stride) |i| {
-                const s0 = data[0..index][(start_index + i)..];
-                const s1 = data[index..][i..];
-                ifftPartial(s0[0..1], s1[0..1], log_m);
+                const s0 = data[start_index + i];
+                const s1 = data[index + i];
+                ifftPartial(s0, s1, log_m);
             }
         }
     }
 }
 
-fn fftPartial(x: []const []u8, y: []const []u8, log_m: u16) void {
+fn fftPartial(x: []u8, y: []u8, log_m: u16) void {
     const lut: Lut = .init(&tables.mul_128[log_m]);
-    for (x, y) |a, b| {
-        for (0..x[0].len / 64) |i| {
-            const start = i * 64;
 
-            var x_lo: V = @bitCast(a[start..][0..32].*);
-            var x_hi: V = @bitCast(a[start + 32 ..][0..32].*);
+    for (0..x.len / 64) |i| {
+        const start = i * 64;
 
-            var y_lo: V = @bitCast(b[start..][0..32].*);
-            var y_hi: V = @bitCast(b[start + 32 ..][0..32].*);
+        var x_lo: V = @bitCast(x[start..][0..32].*);
+        var x_hi: V = @bitCast(x[start + 32 ..][0..32].*);
 
-            x_lo, x_hi = mulAdd(x_lo, x_hi, y_lo, y_hi, lut);
+        var y_lo: V = @bitCast(y[start..][0..32].*);
+        var y_hi: V = @bitCast(y[start + 32 ..][0..32].*);
 
-            a[start..][0..32].* = @bitCast(x_lo);
-            a[start + 32 ..][0..32].* = @bitCast(x_hi);
+        x_lo, x_hi = mulAdd(x_lo, x_hi, y_lo, y_hi, lut);
 
-            y_lo ^= x_lo;
-            y_hi ^= x_hi;
+        x[start..][0..32].* = @bitCast(x_lo);
+        x[start + 32 ..][0..32].* = @bitCast(x_hi);
 
-            b[start..][0..32].* = @bitCast(y_lo);
-            b[start + 32 ..][0..32].* = @bitCast(y_hi);
-        }
+        y_lo ^= x_lo;
+        y_hi ^= x_hi;
+
+        y[start..][0..32].* = @bitCast(y_lo);
+        y[start + 32 ..][0..32].* = @bitCast(y_hi);
     }
 }
 
-fn ifftPartial(x: []const []u8, y: []const []u8, log_m: u16) void {
+fn ifftPartial(x: []u8, y: []u8, log_m: u16) void {
     const lut: Lut = .init(&tables.mul_128[log_m]);
 
-    for (x, y) |a, b| {
-        for (0..x[0].len / 64) |i| {
-            const start = i * 64;
+    for (0..x.len / 64) |i| {
+        const start = i * 64;
 
-            var x_lo: V = @bitCast(a[start..][0..32].*);
-            var x_hi: V = @bitCast(a[start + 32 ..][0..32].*);
+        var x_lo: V = @bitCast(x[start..][0..32].*);
+        var x_hi: V = @bitCast(x[start + 32 ..][0..32].*);
 
-            var y_lo: V = @bitCast(b[start..][0..32].*);
-            var y_hi: V = @bitCast(b[start + 32 ..][0..32].*);
+        var y_lo: V = @bitCast(y[start..][0..32].*);
+        var y_hi: V = @bitCast(y[start + 32 ..][0..32].*);
 
-            y_lo ^= x_lo;
-            y_hi ^= x_hi;
+        y_lo ^= x_lo;
+        y_hi ^= x_hi;
 
-            b[start..][0..32].* = @bitCast(y_lo);
-            b[start + 32 ..][0..32].* = @bitCast(y_hi);
+        y[start..][0..32].* = @bitCast(y_lo);
+        y[start + 32 ..][0..32].* = @bitCast(y_hi);
 
-            x_lo, x_hi = mulAdd(x_lo, x_hi, y_lo, y_hi, lut);
+        x_lo, x_hi = mulAdd(x_lo, x_hi, y_lo, y_hi, lut);
 
-            a[start..][0..32].* = @bitCast(x_lo);
-            a[start + 32 ..][0..32].* = @bitCast(x_hi);
-        }
+        x[start..][0..32].* = @bitCast(x_lo);
+        x[start + 32 ..][0..32].* = @bitCast(x_hi);
     }
 }
 
