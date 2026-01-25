@@ -399,7 +399,7 @@ inline fn mul(lo: V, hi: V, lut: Lut) struct { V, V } {
 
     const data_0 = lo & nibble;
     prod_lo = shuffle(lut.t0_lo, data_0);
-    prod_hi = shuffle(lut.t1_hi, data_0);
+    prod_hi = shuffle(lut.t0_hi, data_0);
 
     const data_1 = (lo >> @splat(4)) & nibble;
     prod_lo ^= shuffle(lut.t1_lo, data_1);
