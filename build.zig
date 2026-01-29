@@ -39,6 +39,19 @@ pub fn build(b: *std.Build) void {
     });
     benchmark_step.dependOn(&b.addRunArtifact(benchmark_exe).step);
 
+    const example_step = b.step("example", "Runs the example");
+    const example_exe = b.addExecutable(.{
+        .name = "example",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("example/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "reedsol", .module = reedsol }},
+        }),
+        .use_llvm = use_llvm,
+    });
+    example_step.dependOn(&b.addRunArtifact(example_exe).step);
+
     const test_step = b.step("test", "Run tests");
     inline for (.{
         .{ "encode", "tests/tests.zig" },

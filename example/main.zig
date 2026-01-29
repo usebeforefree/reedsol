@@ -1,19 +1,3 @@
-## Reed-Solomon erasure encoding library written in Zig
-
-Reed-Solomon encoding is a method used to add redundancy to data before transmission or storage, allowing for error detection and correction. It works by treating data as polynomials and adding extra symbols (parity bits) to help recover the original message if errors occur during transmission.
-
-## Features
-
-- Leverages the parallelism of the AVX2 SIMD instruction set.
-- Flexible Configurations: Support for various data/parity shard ratios.
-- Simple API: Straightforward encode and decode functions.
-- BYOM - Bring your own memory. *With allocations being made in certain cases.
-
-## Example
-
-Run with `zig build example`:
-
-```Zig
 const std = @import("std");
 const reedsol = @import("reedsol");
 
@@ -115,25 +99,3 @@ pub fn main() !void {
     // Assert the recovered data is equal to start data
     for (original, recovered) |o_sh, r_sh| for (o_sh, r_sh) |e, r| try std.testing.expectEqual(e, r);
 }
-```
-
-## Benchmarks
-
-Run with `zig build benchmark -Doptimize=ReleaseFast`:
-
-## Add to your project
-
-Fetch the latest version:
-```bash
-zig fetch --save git+https://github.com/usebeforefree/reedsol.git
-```
-
-Add to your `build.zig`:
-```Zig
-const reedsol = b.dependency("reedsol", .{});
-exe.root_module.addImport("reedsol", reedsol.module("reedsol"));
-```
-
-## Credits
-
-Inspired by https://github.com/AndersTrier/reed-solomon-simd
