@@ -1,9 +1,14 @@
 .{
     .name = .reedsol,
     .version = "0.0.1",
-    .fingerprint = 0xabe294ee641c2aa3, // Changing this has security and trust implications.
+    .fingerprint = 0xabe294ee641c2aa3,
     .minimum_zig_version = "0.15.2",
-    .dependencies = .{},
+    .dependencies = .{
+        .tracy = .{
+            .url = "git+https://github.com/cipharius/zig-tracy.git#22f290947ca272a4aea2a7e5b00ec29fb0c1a8d6",
+            .hash = "zig_tracy-0.0.5-aOIqsYFsAAB11_thqyvA3Gq_7vCruca5bAuTWgySlBEz",
+        },
+    },
     .paths = .{
         "build.zig",
         "build.zig.zon",

@@ -6,6 +6,13 @@ pub fn build(b: *std.Build) void {
 
     const use_llvm = b.option(bool, "use-llvm", "Compile library and tests with LLVM backend") orelse true;
 
+    const tracy_enable = b.option(bool, "tracy_enable", "Enable profiling") orelse true;
+    const tracy = b.dependency("tracy", .{
+        .target = target,
+        .optimize = optimize,
+        .tracy_enable = tracy_enable,
+    });
+
     const tables_exe = b.addExecutable(.{
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/tables.zig"),
@@ -25,6 +32,8 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .imports = &.{.{ .name = "tables", .module = tables_mod }},
     });
+    reedsol.addImport("tracy", tracy.module("tracy"));
+    reedsol.linkLibrary(tracy.artifact("tracy"));
 
     const benchmark_step = b.step("benchmark", "Runs the benchmarks");
     const benchmark_exe = b.addExecutable(.{

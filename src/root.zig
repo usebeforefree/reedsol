@@ -1,6 +1,8 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
+const tracy = @import("tracy");
+
 const gf = @import("gf.zig");
 
 pub const Engine = switch (builtin.target.cpu.arch) {
